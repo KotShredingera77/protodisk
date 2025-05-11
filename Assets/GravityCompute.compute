@@ -1,0 +1,60 @@
+#pragma kernel GravityStep
+
+struct Particle
+{
+    float3 position;
+    float3 velocity;
+    float mass;
+};
+
+RWStructuredBuffer<Particle> particles;
+float deltaTime;
+float gravitationalConstant;
+float softeningFactor; 
+float3 starPosition;
+float starMass;
+float maxParticleSpeed;
+
+[numthreads(64, 1, 1)]
+void GravityStep(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint) particles.Length)
+        return;
+
+    Particle current = particles[id.x];
+    float3 acceleration = 0;
+    
+    float3 starDir = starPosition - current.position;
+    float starDistSq = max(dot(starDir, starDir), softeningFactor);
+    float starInvDist = rsqrt(starDistSq);
+    acceleration += starDir * (gravitationalConstant * starMass * starInvDist * starInvDist * starInvDist);
+    
+    for (int i = 0; i < particles.Length; i++)
+    {
+        if (i == id.x)
+            continue;
+        
+       // Particle other = particles[i];
+       // float3 direction = other.position - current.position;
+       // float distanceSq = max(dot(direction, direction), softeningFactor);
+       // float invDistance = rsqrt(distanceSq);
+       // float force = gravitationalConstant * other.mass * invDistance * invDistance * invDistance;
+       // acceleration += direction * force;
+        
+        Particle other = particles[i];
+        float3 dir = other.position - current.position;
+        float distSq = max(dot(dir, dir), softeningFactor);
+        float invDist = rsqrt(distSq);
+        acceleration += dir * (gravitationalConstant * other.mass * invDist * invDist * invDist);
+    }
+    
+    current.velocity += acceleration * deltaTime;
+    float speed = length(current.velocity);
+    if (speed > maxParticleSpeed)
+    {
+        current.velocity = normalize(current.velocity) * maxParticleSpeed;
+    }
+    current.position += current.velocity * deltaTime;
+
+    particles[id.x] = current;
+}
